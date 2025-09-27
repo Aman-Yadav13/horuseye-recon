@@ -4,6 +4,7 @@ import shlex
 from typing import List
 from app.models import  ToolOutput
 import os
+import socket
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -75,14 +76,13 @@ class ToolRunner:
             success = False
             tool_name_lower = tool_name.lower()
 
-            if tool_name_lower in ['recon-ng', 'dirsearch']:
-                if result.returncode == 0 and 'error' not in (result.stderr or "").lower():
+            if tool_name_lower in ['recon-ng', 'dirsearch', 'theharvester']:
+                if result.returncode == 0 and 'error' not in (result.stderr or "").lower() and 'traceback' not in (result.stderr or "").lower():
                     success = True
             elif tool_name_lower == 'dnsenum':
                 stderr_lower = (result.stderr or "").lower()
                 stdout_lower = (result.stdout or "").lower()
 
-                # dnsenum often exits with 255 but still produces useful data.
                 benign_errors = ["query failed", "noerror", "lame server"]
 
                 has_benign_error = any(err in stderr_lower for err in benign_errors)
@@ -180,28 +180,28 @@ def build_masscan_command(target: str, parameters: List, scan_id: str, tool_name
     """
     Builds masscan command with proper parameter handling.
     """
-    cmd = ["masscan", target]
+    cmd = ["masscan"]
     output_dir = f"/app/outputs/{scan_id}/{tool_name}"
     os.makedirs(output_dir, exist_ok=True)
     output_base = os.path.join(output_dir, "masscan_scan.json")
 
-    ports_specified = False
-
+    ports_specified = any(p.flag in ('-p', '--ports') for p in parameters if hasattr(p, 'flag')) or any(p.get('flag') in ('-p', '--ports') for p in parameters if isinstance(p, dict))
     for param in parameters:
         if hasattr(param, 'flag'):
-            flag, value, requires_value = param.flag, param.value, getattr(param, 'requiresValue', False)
+            flag, value = param.flag, param.value
         else:
-            flag, value, requires_value = param.get('flag'), param.get('value'), param.get('requiresValue', False)
-        if flag == '-p' or flag == '--ports':
-            ports_specified = True
-        if not flag: continue
-        if requires_value and value is not None: cmd.extend([flag, str(value)])
-        elif not requires_value and value in (True, "true"): cmd.append(flag)
+            flag, value = param.get('flag'), param.get('value')
+        if value is not None and value not in (True, "true"):
+            cmd.extend([flag, str(value)])
+        elif value in (True, "true"):
+            cmd.append(flag)
     
     if not ports_specified:
         cmd.extend(["-p", "1-1000"])
         
     cmd.extend(["-oJ", output_base])
+    print("Target in masscan: ", target)
+    cmd.append(target)
     logger.info(f"Built masscan command: {cmd}")
     return cmd
 

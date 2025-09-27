@@ -93,4 +93,3 @@ RUN ln -s /opt/theHarvester/theHarvester.py /usr/local/bin/theharvester && \
 EXPOSE 8080
 
 CMD ["python3", "main.py"]
-

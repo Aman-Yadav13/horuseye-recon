@@ -40,17 +40,17 @@ def execute_scan():
         # Execute each tool
         for tool_request in scan_request.tools:
             try:
-                scan_target = scan_request.target
+                current_target = scan_request.target
                 if tool_request.name.lower() == 'masscan':
-                    scan_target = resolve_to_ip(scan_request.target)
-                    logger.info(f"Resolved {scan_request.target} to {scan_target} for masscan")
+                    current_target = resolve_to_ip(scan_request.target)
+                    logger.info(f"Resolved {scan_request.target} to {current_target} for masscan")
 
                 builder = ToolRunner.get_command_builder(tool_request.name.lower())
-                
+            
                 # Pass the ToolParameter objects directly (not as dictionaries)
                 command = builder(
-                    target=scan_request.target,
-                    parameters=tool_request.parameters,  # Pass the actual objects
+                    target=current_target,
+                    parameters=tool_request.parameters,
                     scan_id=scan_request.scan_id,
                     tool_name=tool_request.name
                 )
