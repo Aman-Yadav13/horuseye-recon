@@ -1,0 +1,17 @@
+marketplace refresh
+marketplace install hackertarget
+marketplace install html
+workspaces create {{ workspace }}
+workspaces select {{ workspace }}
+modules load recon/domains-companies/add_domain
+options set SOURCE {{ domain }}
+run
+modules load recon/domains-hosts/hackertarget
+options set SOURCE {{ domain }}
+run
+modules load reporting/html
+options set FILENAME {{ output_file }}
+options set CREATOR HorusEye Recon Service
+options set CUSTOMER {{ domain }}
+run
+exit

@@ -1,0 +1,11 @@
+services:
+  recon-service:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./outputs:/app/outputs
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+
