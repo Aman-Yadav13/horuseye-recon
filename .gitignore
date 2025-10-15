@@ -35,6 +35,11 @@ env/
 .env/
 .venv/
 
+
+.env
+*.env 
+
+
 # Flask instance folder
 instance/
 *.sqlite3
@@ -73,3 +78,5 @@ pytestdebug.log
 # OS files
 .DS_Store
 Thumbs.db
+
+gcloud-credentials.json

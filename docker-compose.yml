@@ -1,11 +1,47 @@
 services:
-  recon-service:
+  api:
     build: .
+    image: horuseye/recon-service
+    command: flask run --host=0.0.0.0 --port=8080
     ports:
       - "8080:8080"
     volumes:
       - ./outputs:/app/outputs
+      - ./gcloud-credentials.json:/app/gcloud-credentials.json:ro
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/gcloud-credentials.json
+      - GCS_BUCKET_NAME=${GCS_BUCKET_NAME}
+    env_file:
+      - .env
     cap_add:
       - NET_ADMIN
       - NET_RAW
+    depends_on:
+      redis-recon:
+        condition: service_healthy
+
+  worker:
+    build: .
+    image: horuseye/recon-service
+    command: celery -A tasks worker --loglevel=info
+    volumes:
+      - ./outputs:/app/outputs
+      - ./gcloud-credentials.json:/app/gcloud-credentials.json:ro
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/gcloud-credentials.json
+      - GCS_BUCKET_NAME=${GCS_BUCKET_NAME}
+    depends_on:
+      redis-recon:
+        condition: service_healthy
+
+  redis-recon:
+    image: "redis/redis-stack:latest"
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 

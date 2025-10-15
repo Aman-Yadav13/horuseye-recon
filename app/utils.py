@@ -1,7 +1,6 @@
 import socket
 from typing import Optional
 
-
 def reverse_dns_lookup(ip_address: str) -> Optional[str]:
     """
     Performs a reverse DNS lookup on an IP address.

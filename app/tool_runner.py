@@ -4,7 +4,7 @@ import shlex
 from typing import List
 from app.models import  ToolOutput
 import os
-import socket
+from app.post_processing import default_post_processor, get_post_processor
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -101,7 +101,6 @@ class ToolRunner:
                 found_error = any(marker in stdout_lower for marker in error_markers) or any(marker in stderr_lower for marker in error_markers)
                 success = (result.returncode == 0) and not found_error
 
-
             output_files = [stdout_file, stderr_file]
             
             for filename in os.listdir(output_dir):
@@ -110,6 +109,15 @@ class ToolRunner:
                     if os.path.isfile(full_path):
                         output_files.append(full_path)
 
+            
+            if success:
+                logger.info(f"Command for tool '{tool_name}' succeeded. Starting post-processing.")
+                post_processor = get_post_processor(tool_name)
+                post_processor(scan_id, tool_name, output_dir, output_files)
+            else:
+                logger.warning(f"Command for tool '{tool_name}' failed. Uploading raw logs for review.")
+                default_post_processor(scan_id, tool_name, output_dir, output_files)
+            
             return ToolOutput(
                 tool_name=tool_name,
                 command=command,
@@ -138,7 +146,6 @@ class ToolRunner:
             )
             
             
-# --- Tool Command Builders ---
 @ToolRunner.register_tool("nmap")
 def build_nmap_command(target: str, parameters: List, scan_id: str, tool_name: str) -> List[str]:
     """
@@ -273,10 +280,10 @@ def build_subfinder_command(target: str, parameters: List, scan_id: str, tool_na
             flag, value = param.get('flag'), param.get('value'), param.get('requiresValue', False)
 
         if flag not in ["-d", "-dL", "-silent"]:
-             if value is not None and value not in (True, "true"): 
-                 cmd.extend([flag, str(value)])
-             elif value in (True, "true"): 
-                 cmd.append(flag)
+            if value is not None and value not in (True, "true"): 
+                cmd.extend([flag, str(value)])
+            elif value in (True, "true"): 
+                cmd.append(flag)
 
 
     cmd.extend(["-oJ", output_file])
@@ -330,7 +337,6 @@ def build_recon_ng_command(target: str, parameters: List, scan_id: str, tool_nam
     try:
         with open(template_path, 'r') as f:
             template_content = f.read()
-
 
         script_content = template_content.replace("{{ workspace }}", workspace)
         script_content = script_content.replace("{{ domain }}", target)
@@ -513,7 +519,7 @@ def build_dnsenum_command(target: str, parameters: List, scan_id: str, tool_name
     output_dir = f"/app/outputs/{scan_id}/{tool_name}"
     wordlists_dir = "/app/wordlists"
     os.makedirs(output_dir, exist_ok=True)
-    output_file = os.path.join(output_dir, "dnsenum_scan.xml") # dnsenum can output xml
+    output_file = os.path.join(output_dir, "dnsenum_scan.xml")
 
     for param in parameters:
         if hasattr(param, 'flag'):
