@@ -1,0 +1,48 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: recon-scan-
+  namespace: argo
+spec:
+  workflowTemplateRef:
+    name: recon-workflow-template 
+
+  arguments:
+    parameters:
+    - name: scan-id
+      value: "test-scan-002" 
+
+    - name: target
+      value: "scanme.nmap.org"
+
+    - name: recon-tools-payload-json 
+      value: |
+        [
+          {
+            "name": "nmap",
+            "parameters": [
+              { "flag": "-sV", "value": "true" },
+              { "flag": "-T4", "value": "true" },
+              { "flag": "--top-ports", "value": "20" }
+            ]
+          }
+        ]
+        
+    - name: vulnr-tools-payload-json 
+      value: |
+        [
+          {
+            "name": "nuclei",
+            "parameters": [
+              {
+                "flag": "templateCategories",
+                "value": "cves,exposed-panels",
+                "requiresValue": true
+              }
+            ]
+          },
+          {
+            "name": "httpx",
+            "parameters": []
+          }
+        ]

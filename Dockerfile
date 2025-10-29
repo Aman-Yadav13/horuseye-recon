@@ -98,4 +98,4 @@ RUN ln -s /opt/theharvester/theHarvester.py /usr/local/bin/theharvester && \
 
 EXPOSE 8080
 
-CMD ["python3", "main.py"]
+CMD ["python3", "argo_run_scan.py"]

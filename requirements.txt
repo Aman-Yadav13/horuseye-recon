@@ -3,3 +3,4 @@ pydantic
 defusedxml
 google-cloud-storage
 celery[redis]
+google-cloud-pubsub

@@ -1,5 +1,6 @@
 import logging
 import os
+import json
 from celery_app import celery
 from app.models import ScanRequest, ScanResponse, ToolOutput
 from app.tool_runner import ToolRunner
@@ -8,8 +9,10 @@ from app.utils import reverse_dns_lookup, resolve_to_ip
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-@celery.task(name='tasks.run_recon_scan')
-def run_recon_scan(scan_request_data: dict):
+def execute_scan_logic(scan_request_data: dict):
+    """
+    Core scan logic, callable from anywhere.
+    """
     try:
         scan_request = ScanRequest(**scan_request_data)
         logger.info(f"Recon worker starting scan for target: {scan_request.target}, ID: {scan_request.scan_id}")
@@ -86,4 +89,13 @@ def run_recon_scan(scan_request_data: dict):
 
     except Exception as e:
         logger.exception("Critical error in Recon worker task")
-        return {"status": "error", "details": str(e)}
+        # We must raise an exception to make the Argo workflow fail
+        raise e
+
+@celery.task(name='tasks.run_recon_scan')
+def run_recon_scan(scan_request_data: dict):
+    """
+    Celery task wrapper.
+    """
+    return execute_scan_logic(scan_request_data)
+
