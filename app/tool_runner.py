@@ -171,9 +171,11 @@ def build_nmap_command(target: str, parameters: List, scan_id: str, tool_name: s
         if flag in ('-oX', '-oN', '-oA'):
             output_specified = True
             cmd.extend([flag, output_base])
-        elif requires_value and value is not None: cmd.extend([flag, str(value)])
-        elif not requires_value and value in (True, "true"): cmd.append(flag)
-
+        elif value is not None and value not in (True, "true"):
+            cmd.extend([flag, str(value)])
+        elif value in (True, "true"):
+            cmd.append(flag)
+            
     if not output_specified:
         cmd.extend(["-oX", f"{output_base}.xml"])
     
