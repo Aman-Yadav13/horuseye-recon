@@ -4,17 +4,46 @@ import logging
 import sys
 import time
 import random
+import requests
+import datetime 
+from functools import partial 
 
-# Import the new function from tasks.py
 from tasks import execute_scan_logic
 
-# --- NEW: Import GCS & Pub/Sub clients ---
 from google.cloud import pubsub_v1
 from google.cloud import storage
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ArgoWorker")
 
+FASTAPI_INTERNAL_URL = "http://fastapi-gateway-svc.default.svc.cluster.local:80/api/v1/internal"
+
+def update_scan_status(scan_id: str, status: str):
+    """Calls the internal FastAPI endpoint to update the overall Scan status."""
+    try:
+        payload = {"scan_id": scan_id, "status": status}
+        response = requests.post(f"{FASTAPI_INTERNAL_URL}/scan/status", json=payload, timeout=5)
+        response.raise_for_status() # Raise an exception for bad status codes
+        logger.info(f"Successfully updated Scan {scan_id} status to {status}")
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Failed to update Scan status to {status} for {scan_id}: {e}")
+        # Non-fatal, log the error but allow the workflow to continue
+
+def update_tool_status(scan_id: str, tool_name: str, status: str):
+    """Calls the internal FastAPI endpoint to update a specific ToolExecution status."""
+    try:
+        payload = {
+            "scan_id": scan_id,
+            "tool_name": tool_name,
+            "status": status,
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
+        }
+        response = requests.post(f"{FASTAPI_INTERNAL_URL}/tool/status", json=payload, timeout=5)
+        response.raise_for_status()
+        logger.info(f"Successfully updated Tool {tool_name} for Scan {scan_id} to {status}")
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Failed to update Tool {tool_name} status to {status} for {scan_id}: {e}")
+        # Non-fatal, log the error but allow the tool to run
 
 def upload_to_gcs(bucket_name: str, scan_id: str, payload_json: str):
     """
@@ -37,7 +66,6 @@ def upload_to_gcs(bucket_name: str, scan_id: str, payload_json: str):
         # Unlike Pub/Sub, this is a critical failure.
         # If this fails, the vuln scan cannot run.
         sys.exit(1)
-
 
 def publish_to_pubsub(project_id: str, topic_id: str, scan_id: str, target: str, max_retries: int = 5):
     """
@@ -81,8 +109,6 @@ def main():
         scan_id = os.environ['SCAN_ID']
         target = os.environ['TARGET']
         recon_tools_payload_json = os.environ['RECON_TOOLS_PAYLOAD_JSON'] # Renamed for clarity
-        
-        # --- NEW: Get payload for the *next* step ---
         vulnr_tools_payload_json = os.environ['VULNR_TOOLS_PAYLOAD_JSON']
 
         gcp_project_id = os.environ['GCP_PROJECT_ID']
@@ -109,12 +135,20 @@ def main():
         sys.exit(1)
 
     try:
+        update_scan_status(scan_id, "recon_running")
+
+        tool_status_callback = partial(update_tool_status, scan_id)
+
         logger.info("Handing off to recon scan logic...")
-        result = execute_scan_logic(scan_request_data)
+        # --- NEW: Pass the callback to the logic function ---
+        result = execute_scan_logic(scan_request_data, tool_status_callback)
         logger.info(f"Recon scan logic completed. Result: {result}")
 
         logger.info("Uploading vulnerability payload to GCS for next step...")
         upload_to_gcs(gcs_bucket_name, scan_id, vulnr_tools_payload_json)
+
+        # --- NEW: Update Scan status to 'recon_complete' ---
+        update_scan_status(scan_id, "recon_complete")
 
         logger.info("Recon complete. Publishing to Pub/Sub...")
         publish_to_pubsub(gcp_project_id, pubsub_topic_id, scan_id, target)
@@ -124,6 +158,7 @@ def main():
 
     except Exception as e:
         logger.exception(f"Scan logic failed with a critical error: {e}")
+        update_scan_status(scan_id, "failed")
         logger.info("--- Argo Worker Failed ---")
         sys.exit(1)
 
